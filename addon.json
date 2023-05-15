@@ -1,0 +1,20 @@
+{
+    "name": "Vanilla Webhooks",
+    "description": "Vanilla Webhooks is an Plugin that implements basic webhooks for certain events.",
+    "version": "0.1",
+    "hasLocale": true,
+    "mobileFriendly": true,
+    "settingsUrl": "/settings/vanilla_webhooks",
+    "pluginUrl": "https://github.com/kaahila/vanilla_webhooks",
+    "settingsPermission": "Garden.Settings.Manage",
+    "license": "MIT",
+    "key": "vanilla_webhooks",
+    "icon": "webhook_icon.png",
+    "type": "addon",
+    "authors": [
+        {
+            "name": "Tobias Herbold",
+            "homepage": "https://github.com/kaahila"
+        }
+    ]
+}
