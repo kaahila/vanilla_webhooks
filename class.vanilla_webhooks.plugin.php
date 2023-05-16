@@ -289,6 +289,7 @@ class Vanilla_Webhooks extends Gdn_Plugin
         self::debug($args);
         self::debug("----------------------");
         $user = $args['FormPostValues'];
+        self::debug($user);
         if (!self::getOptionValue(-1, "usermodel_webhook")) {
             self::debug("Not sending for user_webhook, exiting");
             return;
@@ -297,11 +298,12 @@ class Vanilla_Webhooks extends Gdn_Plugin
             self::debug("No Webhook URL for this category, exiting");
             return;
         }
-        $user['Url'] = self::getUserUrl($args['CategoryID']);
-        $user['Type'] = 'User';
         unset($user['Password']);
         unset($user['LastIPAddress']);
         unset($user['InsertIPAddress']);
+        unset($user['UpdateIPAddress']);
+        $user['Url'] = self::getUserUrl($args['CategoryID']);
+        $user['Type'] = 'User';
         self::callWebhook($hookURL, json_encode($user, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
     }
 
