@@ -9,7 +9,7 @@ class Vanilla_Webhooks extends Gdn_Plugin
     const DEFAULT_CONFIG_KEY = "Garden.Vanilla_Webhooks";
     const SETTINGS_URL = "/settings/vanilla_webhooks";
 
-    const DEBUG = true;
+    const DEBUG = false;
 
     // Global 0 = no default, 1 is default + override, 2 is plugin level setting only
     const OPTIONS = [
@@ -87,11 +87,7 @@ class Vanilla_Webhooks extends Gdn_Plugin
     private static function debug($data)
     {
         if (self::DEBUG) {
-            if (is_array($data) || is_object($data)) {
-                $string = print_r($data, true);
-            } else {
-                $string = $data;
-            }
+            $string = var_export($data, true);
             error_log($string);
         }
     }
@@ -235,7 +231,7 @@ class Vanilla_Webhooks extends Gdn_Plugin
         return userUrl($user, 1, true);
     }
 
-    private static function callWebhook($hookURL, $hookObject)
+    private static function callWebhook($hookURL, $hookObject, $requestType = "POST")
     {
         if (!function_exists('curl_version')) {
             self::debug("CURL not installed, exiting");
@@ -254,16 +250,19 @@ class Vanilla_Webhooks extends Gdn_Plugin
 
         curl_setopt_array($ch, [
             CURLOPT_URL => $hookURL,
-            CURLOPT_POST => true,
+            CURLOPT_CUSTOMREQUEST => $requestType,
             CURLOPT_POSTFIELDS => $hookObject,
             CURLOPT_HTTPHEADER => $headers,
         ]);
+        try {
+            $response = curl_exec($ch);
 
-        $response = curl_exec($ch);
-
-        self::debug("Response: $response");
-
-        curl_close($ch);
+            self::debug("Response: $response");
+        } catch (\Exception $e) {
+            self::debug("Exception: " . $e->getMessage());
+        } finally {
+            curl_close($ch);
+        }
     }
 
     private static function getUserLink($id, $markdown = false)
@@ -289,7 +288,6 @@ class Vanilla_Webhooks extends Gdn_Plugin
         self::debug($args);
         self::debug("----------------------");
         $user = $args['FormPostValues'];
-        self::debug($user);
         if (!self::getOptionValue(-1, "usermodel_webhook")) {
             self::debug("Not sending for user_webhook, exiting");
             return;
@@ -304,16 +302,35 @@ class Vanilla_Webhooks extends Gdn_Plugin
         unset($user['UpdateIPAddress']);
         $user['Url'] = self::getUserUrl($args['CategoryID']);
         $user['Type'] = 'User';
+        $user['UserID'] = $args['UserID'];
         self::callWebhook($hookURL, json_encode($user, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
     }
 
     /**
-     * Attach files to a discussion during save.
+     * Save Handler for the discussionModel.
      *
-     * @access public
-     * @param object $sender
+     * @param \DiscussionModel $sender
      * @param array $args
      */
+    public function UserModel_BeforeDeleteUser_handler(UserModel $sender, array $args)
+    {
+        self::debug("UserModel_BeforeDeleteUser_handler");
+        self::debug($args);
+        self::debug("----------------------");
+        if (!self::getOptionValue(-1, "usermodel_webhook")) {
+            self::debug("Not sending for user_webhook, exiting");
+            return;
+        }
+        if (!$hookURL = self::getOptionValue(-1, "webhook_url")) {
+            self::debug("No Webhook URL for this category, exiting");
+            return;
+        }
+        $user['UserID'] = $args['UserID'];
+        $user['Type'] = 'User';
+        self::callWebhook($hookURL, json_encode($user, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), "DELETE");
+    }
+
+
     public function postController_afterDiscussionSave_handler($sender, $args)
     {
         self::debug("postController_afterDiscussionSave_handler");
@@ -352,13 +369,36 @@ class Vanilla_Webhooks extends Gdn_Plugin
         self::callWebhook($hookURL, $hookObject);
     }
 
+
+    public function DiscussionModel_DeleteDiscussion_handler(DiscussionModel $sender, array $args)
+    {
+        self::debug("DiscussionModel_DeleteDiscussion_handler");
+        self::debug($args);
+        self::debug("----------------------");
+        $categoryID = $args['Discussion']['CategoryID'];
+        if (!self::validateHook($categoryID)) {
+            return;
+        }
+        if (!self::getOptionValue($categoryID, "discussion_webhook")) {
+            self::debug("Not sending for discussion_webhook, exiting");
+            return;
+        }
+        if (!$hookURL = self::getOptionValue($categoryID, "webhook_url")) {
+            self::debug("No Webhook URL for this category, exiting");
+            return;
+        }
+        $discussion['DiscussionID'] = $args['DiscussionID'];
+        $discussion['Type'] = 'Discussion';
+        self::callWebhook($hookURL, json_encode($discussion, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), "DELETE");
+    }
+
     /**
      * Save Handler for categoryModel.
      *
-     * @param \CategoryModel $sender
+     * @param CategoryModel $sender
      * @param array $args
      */
-    public function CategoryModel_AfterSaveCategory_handler(\CategoryModel $sender, array $args)
+    public function CategoryModel_AfterSaveCategory_handler(CategoryModel $sender, array $args)
     {
 
         self::debug("CategoryModel_AfterSaveCategory_handler");
@@ -376,20 +416,39 @@ class Vanilla_Webhooks extends Gdn_Plugin
         }
         $category['Url'] = self::getCategoryUrl($args['CategoryID']);
         $category['Type'] = 'Category';
+        $category['CategoryID'] = $args['CategoryID'];
         self::callWebhook($hookURL, json_encode($category, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+    }
+
+    public function CategoryModel_AfterDeleteCategory_handler(CategoryModel $sender, array $args)
+    {
+        self::debug("CategoryModel_AfterDeleteCategory_handler");
+        self::debug($args);
+        self::debug("----------------------");
+        $parentCategoryId = $args['Category']['ParentCategoryID'];
+        if (!self::getOptionValue($parentCategoryId, "child_category_webhook")) {
+            self::debug("Not sending for child_category_webhook, exiting");
+            return;
+        }
+        if (!$hookURL = self::getOptionValue($parentCategoryId, "webhook_url")) {
+            self::debug("No Webhook URL for this category, exiting");
+            return;
+        }
+        $category['CategoryID'] = $args['CategoryID'];
+        $category['Type'] = 'Category';
+        self::callWebhook($hookURL, json_encode($category, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), "DELETE");
     }
 
     protected static function validateHook($categoryID): bool
     {
         self::debug("Validating hook for category $categoryID");
-        self::debug(self::getOptionValue($categoryID, "locally_on"));
         if (!self::getOptionValue($categoryID, "locally_on")) {
             return false;
         }
         return true;
     }
 
-    public function postController_afterCommentSave_handler($comment, $args)
+    public function postController_afterCommentSave_handler($sender, $args)
     {
         self::debug("postController_afterCommentSave_handler");
         self::debug($args);
@@ -427,6 +486,32 @@ class Vanilla_Webhooks extends Gdn_Plugin
         $hookObject = json_encode($comment, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
         self::callWebhook($hookURL, $hookObject);
+    }
+
+    public function CommentModel_DeleteComment_handler(CommentModel $sender, $args)
+    {
+        self::debug("CommentModel_DeleteComment_handler");
+        self::debug($args);
+        self::debug("----------------------");
+        if (!$args['Discussion']) {
+            self::debug("No discussion, exiting");
+            return;
+        }
+        $discussion = $args['Discussion'];
+        if (!self::validateHook($discussion['CategoryID'])) {
+            return;
+        }
+        if (!self::getOptionValue($discussion['CategoryID'], "comment_webhook")) {
+            self::debug("Not sending for comment_webhook, exiting");
+            return;
+        }
+        if (!$hookURL = self::getOptionValue($discussion['CategoryID'], "webhook_url")) {
+            self::debug("No Webhook URL for this category, exiting");
+            return;
+        }
+        $comment['CommentID'] = $args['CommentID'];
+        $comment['Type'] = 'Comment';
+        self::callWebhook($hookURL, json_encode($comment, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), "DELETE");
     }
 
     private static function classToArray($class)
