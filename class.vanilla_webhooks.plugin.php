@@ -9,7 +9,7 @@ class Vanilla_Webhooks extends Gdn_Plugin
     const DEFAULT_CONFIG_KEY = "Garden.Vanilla_Webhooks";
     const SETTINGS_URL = "/settings/vanilla_webhooks";
 
-    const DEBUG = false;
+    const DEBUG = true;
 
     // Global 0 = no default, 1 is default + override, 2 is plugin level setting only
     const OPTIONS = [
@@ -246,7 +246,6 @@ class Vanilla_Webhooks extends Gdn_Plugin
             self::getOptionValue(0, "auth_header_name") . ":" .
             self::getOptionValue(0, "auth_header_value"),
         ];
-        self::debug("Headers: " . json_encode($headers));
 
         curl_setopt_array($ch, [
             CURLOPT_URL => $hookURL,
@@ -254,13 +253,15 @@ class Vanilla_Webhooks extends Gdn_Plugin
             CURLOPT_POSTFIELDS => $hookObject,
             CURLOPT_HTTPHEADER => $headers,
         ]);
-        try {
-            $response = curl_exec($ch);
 
-            self::debug("Response: $response");
+        self::debug("Calling: " . $hookURL);
+        try {
+            curl_exec($ch);
+            self::debug("Curl send");
         } catch (\Exception $e) {
             self::debug("Exception: " . $e->getMessage());
         } finally {
+            self::debug("Closing CURL");
             curl_close($ch);
         }
     }
@@ -331,10 +332,10 @@ class Vanilla_Webhooks extends Gdn_Plugin
     }
 
 
-    public function postController_afterDiscussionSave_handler($sender, $args)
+    public function DiscussionModel_AfterSaveDiscussion_handler($sender, $args)
     {
-        self::debug("postController_afterDiscussionSave_handler");
-        self::debug($args);
+        self::debug("DiscussionModel_AfterSaveDiscussion_handler");
+        self::debug($args['Discussion']);
         self::debug("----------------------");
         if (!$args['Discussion']) {
             self::debug("No discussion, exiting");
@@ -448,9 +449,9 @@ class Vanilla_Webhooks extends Gdn_Plugin
         return true;
     }
 
-    public function postController_afterCommentSave_handler($sender, $args)
+    public function CommentModel_AfterSaveComment_handler($sender, $args)
     {
-        self::debug("postController_afterCommentSave_handler");
+        self::debug("CommentModel_AfterSaveComment_handler");
         self::debug($args);
         self::debug("----------------------");
         if (!$args['Discussion']) {
