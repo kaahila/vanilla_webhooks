@@ -452,7 +452,7 @@ class Vanilla_Webhooks extends Gdn_Plugin
     public function CommentModel_AfterSaveComment_handler($sender, $args)
     {
         self::debug("CommentModel_AfterSaveComment_handler");
-        self::debug($args);
+        self::debug($args['Comment']);
         self::debug("----------------------");
         if (!$args['Discussion']) {
             self::debug("No discussion, exiting");
